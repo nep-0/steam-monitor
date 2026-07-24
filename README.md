@@ -1,8 +1,10 @@
 # Steam Monitor
 
+[中文文档](README.zh-CN.md)
+
 A standalone local web UI for monitoring public Steam profiles. It polls the Steam Web API, records completed game sessions in SQLite, and removes session history older than the configured retention period. It has no AstrBot, chat, or notification dependencies.
 
-This project is a standalone Go adaptation of [Maoer233/astrbot_plugin_steam_status_monitor](https://github.com/Maoer233/astrbot_plugin_steam_status_monitor), the original AstrBot Steam status monitor plugin.
+❤️ This project is a standalone Go adaptation of [Maoer233/astrbot_plugin_steam_status_monitor](https://github.com/Maoer233/astrbot_plugin_steam_status_monitor), the original AstrBot Steam status monitor plugin.
 
 ## Run
 
@@ -12,6 +14,21 @@ This project is a standalone Go adaptation of [Maoer233/astrbot_plugin_steam_sta
 4. Open <http://127.0.0.1:8080>, add public profiles, and use **Poll now** to initialise them. The add form accepts SteamID64, a Steam profile URL, a vanity URL, an `s.team/p/` link, or an 8–10 digit account ID; comma-separate multiple entries.
 
 `config.json` controls the listen address, database location, polling interval, optional HTTP proxy, request timeout, and `retention_days`. The database and all recorded sessions are stored locally at `database_path`.
+
+Example `config.json`:
+
+```json
+{
+  "steam_api_key": "replace-with-your-Steam-Web-API-key",
+  "listen_address": "127.0.0.1:8080",
+  "database_path": "data/steam-monitor.db",
+  "poll_interval_seconds": 60,
+  "request_timeout_seconds": 15,
+  "retention_days": 180,
+  "proxy_url": "",
+  "steam_api_base": "https://api.steampowered.com"
+}
+```
 
 ## Build from source
 
