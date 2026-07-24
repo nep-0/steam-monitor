@@ -3,19 +3,21 @@ package web
 
 import (
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"steam-monitor/monitor"
 	"steam-monitor/steam"
 	"steam-monitor/store"
 )
 
-//go:embed index.html app.js style.css
+//go:embed dist/*
 var files embed.FS
 
 type Server struct {
@@ -29,13 +31,19 @@ func New(s *store.Store, c *steam.Client, m *monitor.Monitor) *Server {
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	assets, _ := fs.Sub(files, ".")
+	assets, _ := fs.Sub(files, "dist")
 	mux.Handle("/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/players", s.players)
 	mux.HandleFunc("/api/players/", s.playerByID)
+	mux.HandleFunc("/api/players/search", s.searchPlayers)
 	mux.HandleFunc("/api/dashboard", s.dashboard)
 	mux.HandleFunc("/api/sessions", s.sessions)
+	mux.HandleFunc("/api/analytics", s.analytics)
+	mux.HandleFunc("/api/gantt", s.gantt)
+	mux.HandleFunc("/api/heatmap", s.heatmap)
+	mux.HandleFunc("/api/export/sessions.csv", s.exportSessions)
+	mux.HandleFunc("/api/export/sessions.json", s.exportSessionsJSON)
 	mux.HandleFunc("/api/poll", s.poll)
 	return mux
 }
@@ -90,12 +98,76 @@ func (s *Server) players(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 	}
 }
+func (s *Server) searchPlayers(w http.ResponseWriter, r *http.Request) {
+	players, err := s.store.SearchPlayers(strings.TrimSpace(r.URL.Query().Get("q")))
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	out(w, 200, players)
+}
 func (s *Server) playerByID(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/players/")
+	if r.Method == http.MethodPatch {
+		if len(id) != 17 {
+			out(w, 400, map[string]string{"error": "invalid SteamID64"})
+			return
+		}
+		var in struct {
+			Nickname string `json:"nickname"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			out(w, 400, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		in.Nickname = strings.TrimSpace(in.Nickname)
+		if len([]rune(in.Nickname)) > 80 {
+			out(w, 400, map[string]string{"error": "nickname must be 80 characters or fewer"})
+			return
+		}
+		found, err := s.store.UpdateNickname(id, in.Nickname)
+		if err != nil {
+			out(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if !found {
+			out(w, 404, map[string]string{"error": "player not found"})
+			return
+		}
+		log.Printf("web update nickname: steam_id=%s nickname_set=%t", id, in.Nickname != "")
+		out(w, 200, map[string]string{"steam_id": id, "nickname": in.Nickname})
+		return
+	}
+	if r.Method == http.MethodGet {
+		days := integer(r, 90, 1, 3650)
+		players, err := s.store.Players()
+		if err != nil {
+			out(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		var found any
+		for _, player := range players {
+			if player.SteamID == id {
+				found = player
+				break
+			}
+		}
+		if found == nil {
+			out(w, 404, map[string]string{"error": "player not found"})
+			return
+		}
+		sessions, err := s.store.PlayerSessions(id, days)
+		if err != nil {
+			out(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		out(w, 200, map[string]any{"player": found, "sessions": sessions, "days": days})
+		return
+	}
 	if r.Method != http.MethodDelete {
 		w.WriteHeader(405)
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/players/")
 	if len(id) != 17 {
 		out(w, 400, map[string]string{"error": "invalid SteamID64"})
 		return
@@ -135,8 +207,69 @@ func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
 	}
 	out(w, 200, sessions)
 }
+func (s *Server) analytics(w http.ResponseWriter, r *http.Request) {
+	days := integer(r, 90, 1, 3650)
+	daily, players, err := s.store.Analytics(days)
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	out(w, 200, map[string]any{"days": days, "daily": daily, "players": players})
+}
+func (s *Server) gantt(w http.ResponseWriter, r *http.Request) {
+	days := integer(r, 1, 1, 90)
+	offset := integerParam(r, "offset", 0, 0, 3650)
+	players, start, end, err := s.store.Gantt(days, offset)
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	out(w, 200, map[string]any{"players": players, "time_range": map[string]string{"start": start.Format(time.RFC3339), "end": end.Format(time.RFC3339)}})
+}
+func (s *Server) heatmap(w http.ResponseWriter, r *http.Request) {
+	days := integer(r, 90, 1, 3650)
+	values, err := s.store.Heatmap(days, strings.TrimSpace(r.URL.Query().Get("player")))
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	out(w, 200, map[string]any{"days": days, "heatmap": values})
+}
+func (s *Server) exportSessions(w http.ResponseWriter, r *http.Request) {
+	days := integer(r, 30, 1, 3650)
+	sessions, err := s.store.Sessions(days)
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=steam-sessions.csv")
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"steam_id", "player", "game", "started_at", "ended_at", "seconds"})
+	for _, session := range sessions {
+		_ = writer.Write([]string{session.SteamID, session.Player, session.Game, strconv.FormatInt(session.Started, 10), strconv.FormatInt(session.Ended, 10), strconv.FormatInt(session.Seconds, 10)})
+	}
+	writer.Flush()
+}
+func (s *Server) exportSessionsJSON(w http.ResponseWriter, r *http.Request) {
+	days := integer(r, 30, 1, 3650)
+	sessions, err := s.store.Sessions(days)
+	if err != nil {
+		out(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=steam-sessions.json")
+	out(w, 200, sessions)
+}
 func integer(r *http.Request, fallback, min, max int) int {
 	n, err := strconv.Atoi(r.URL.Query().Get("days"))
+	if err != nil || n < min || n > max {
+		return fallback
+	}
+	return n
+}
+func integerParam(r *http.Request, key string, fallback, min, max int) int {
+	n, err := strconv.Atoi(r.URL.Query().Get(key))
 	if err != nil || n < min || n > max {
 		return fallback
 	}

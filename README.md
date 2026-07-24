@@ -22,3 +22,19 @@ go build -o steam-monitor .
 cp config.example.json config.json
 ./steam-monitor
 ```
+
+The WebUI source is in `frontend/` and uses npm, Vite, React, and TypeScript. To rebuild the embedded assets after changing the frontend:
+
+```sh
+cd frontend
+npm install
+npm run build
+cd ..
+go build -o steam-monitor .
+```
+
+The production build is written to `web/dist/` and embedded into the Go binary.
+
+The WebUI includes dashboard status, player management with name/ID/game search and editable local nicknames, a proportional session timeline, team and per-player calendar heatmaps, activity rankings, daily activity bars, runtime diagnostics, and CSV/JSON session exports. Sessions are closed when a previously tracked player disappears from a successful poll response, and old records are removed according to `retention_days`.
+
+The standalone scope intentionally excludes AstrBot collections, QQ/group bindings, chat commands, push notifications, and permission management.
