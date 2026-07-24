@@ -1,0 +1,10 @@
+{
+  "steam_api_key": "replace-with-your-Steam-Web-API-key",
+  "listen_address": "127.0.0.1:8080",
+  "database_path": "data/steam-monitor.db",
+  "poll_interval_seconds": 60,
+  "request_timeout_seconds": 15,
+  "retention_days": 180,
+  "proxy_url": "",
+  "steam_api_base": "https://api.steampowered.com"
+}
