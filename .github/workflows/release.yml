@@ -30,7 +30,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  release:
+  build:
     needs: frontend
     runs-on: ubuntu-latest
     strategy:
@@ -44,7 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: stable }
+        with:
+          go-version: stable
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
@@ -58,7 +59,23 @@ jobs:
           suffix=""
           if [ "$GOOS" = windows ]; then suffix=.exe; fi
           go build -trimpath -ldflags="-s -w" -o "steam-monitor-${GOOS}-${GOARCH}${suffix}" .
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - uses: actions/upload-artifact@v4
         with:
-          files: steam-monitor-*
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: steam-monitor-${{ matrix.goos }}-${{ matrix.goarch }}*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/steam-monitor-*
