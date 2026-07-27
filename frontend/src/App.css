@@ -44,10 +44,12 @@ h1, h2, p { margin-top: 0; } h1 { margin-bottom: 5px; font-size: 24px; } h2 { ma
 .gantt-row { display: grid; min-width: 0; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: center; }
 .gantt-row > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .gantt-track { position: relative; min-width: 0; height: 28px; border: 1px solid var(--line); background: #0e1923; }
-.gantt-bar { position: absolute; top: 5px; bottom: 5px; min-width: 3px; border-radius: 0; }
+.gantt-bar { position: absolute; top: 5px; bottom: 5px; min-width: 1px; border-radius: 0; }
+.gantt-bar.ongoing { background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgb(255 255 255 / 35%) 4px 7px); outline: 1px solid rgb(255 255 255 / 40%); }
 .gantt-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; color: var(--muted); font-size: 12px; }
 .gantt-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .gantt-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 1px; }
+.gantt-legend .ongoing-key { background: repeating-linear-gradient(135deg, #56a9d9 0 4px, #b8e6ff 4px 7px); }
 .heatmap-grid { display: grid; grid-template-columns: repeat(15, minmax(28px, 1fr)); gap: 5px; }
 .heatmap-cell { display: grid; min-height: 34px; place-items: center; border: 1px solid var(--line); border-radius: 4px; color: var(--text); background: #287fb9; font-size: 11px; }
 @media (max-width: 650px) { .filter-actions { width: 100%; } .filter-actions select { width: 100%; } .heatmap-grid { grid-template-columns: repeat(7, minmax(30px, 1fr)); } }

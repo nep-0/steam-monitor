@@ -4,7 +4,7 @@ import './App.css'
 
 type Player = { steam_id: string; nickname: string; name: string; avatar: string; state: number; game_id: number; game: string }
 type Game = { name: string; seconds: number }
-type Session = { steam_id: string; player: string; game: string; started_at: number; seconds: number }
+type Session = { steam_id: string; player: string; game: string; started_at: number; ended_at: number; seconds: number; ongoing: boolean }
 type Dashboard = { total_players: number; playing: number; top_games: Game[] }
 type Health = { last_poll: string; last_error: string }
 type Analytics = { daily: { date: string; seconds: number }[]; players: { steam_id: string; player: string; seconds: number }[] }
@@ -283,14 +283,17 @@ function Timeline({ days, setDays }: { days: string; setDays: (value: string) =>
         {data.players.map(player => <div className="gantt-row" key={player.steam_id}>
           <strong title={player.steam_id}>{player.player}</strong>
           <div className="gantt-track">{player.sessions.map(session => {
-            const left = Math.max(0, (session.started_at * 1000 - start) / range * 100)
-            const width = Math.max(1, session.seconds * 1000 / range * 100)
+            const sessionStart = Math.max(start, session.started_at * 1000)
+            const sessionEnd = Math.min(end, session.ended_at * 1000)
+            const left = Math.max(0, (sessionStart - start) / range * 100)
+            const width = Math.max(0, (sessionEnd - sessionStart) / range * 100)
             const game = session.game || 'Unknown game'
-            return <span className="gantt-bar" key={session.started_at} style={{ left: left + '%', width: width + '%', backgroundColor: gameColor(game, games) }} title={game + ': ' + duration(session.seconds)} />
+            const title = game + ': ' + duration(session.seconds) + (session.ongoing ? ' (ongoing)' : '')
+            return <span className={session.ongoing ? 'gantt-bar ongoing' : 'gantt-bar'} key={session.started_at} style={{ left: left + '%', width: width + '%', backgroundColor: gameColor(game, games) }} title={title} />
           })}</div>
         </div>)}
-      </div> : <Empty text="No completed sessions in this window." />}
-      {games.length > 0 && <div className="gantt-legend">{games.map(game => <span key={game}><i style={{ backgroundColor: gameColor(game, games) }} />{game}</span>)}</div>}
+      </div> : <Empty text="No sessions in this window." />}
+      {games.length > 0 && <div className="gantt-legend">{games.map(game => <span key={game}><i style={{ backgroundColor: gameColor(game, games) }} />{game}</span>)}<span><i className="ongoing-key" />Ongoing session</span></div>}
     </Panel>
   </>
 }

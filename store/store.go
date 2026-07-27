@@ -35,6 +35,7 @@ type Session struct {
 	Started int64  `json:"started_at"`
 	Ended   int64  `json:"ended_at"`
 	Seconds int64  `json:"seconds"`
+	Ongoing bool   `json:"ongoing"`
 }
 type Game struct {
 	Name    string `json:"name"`
@@ -311,6 +312,40 @@ func (s *Store) Gantt(days int, offset int) ([]GanttPlayer, time.Time, time.Time
 			byPlayer[item.SteamID] = entry
 		}
 		entry.Sessions = append(entry.Sessions, item)
+	}
+	activeRows, err := s.db.Query(`SELECT steam_id,COALESCE(NULLIF(nickname,''),name,steam_id),game_name,game_started_at FROM players WHERE game_id>0 AND game_started_at>0`)
+	if err != nil {
+		return nil, time.Time{}, time.Time{}, err
+	}
+	defer activeRows.Close()
+	activeEnd := now.Unix()
+	if activeEnd > end.Unix() {
+		activeEnd = end.Unix()
+	}
+	for activeRows.Next() {
+		var steamID, player, game string
+		var started int64
+		if err := activeRows.Scan(&steamID, &player, &game, &started); err != nil {
+			return nil, time.Time{}, time.Time{}, err
+		}
+		if activeEnd <= start.Unix() || started >= end.Unix() {
+			continue
+		}
+		if started < start.Unix() {
+			started = start.Unix()
+		}
+		if activeEnd <= started {
+			continue
+		}
+		entry := byPlayer[steamID]
+		if entry == nil {
+			entry = &GanttPlayer{SteamID: steamID, Player: player, Sessions: make([]Session, 0)}
+			byPlayer[steamID] = entry
+		}
+		entry.Sessions = append(entry.Sessions, Session{SteamID: steamID, Player: player, Game: game, Started: started, Ended: activeEnd, Seconds: activeEnd - started, Ongoing: true})
+	}
+	if err := activeRows.Err(); err != nil {
+		return nil, time.Time{}, time.Time{}, err
 	}
 	out := make([]GanttPlayer, 0, len(byPlayer))
 	for _, item := range byPlayer {

@@ -96,3 +96,30 @@ func TestUpdateNickname(t *testing.T) {
 		t.Fatalf("missing player update: found=%t err=%v", found, err)
 	}
 }
+
+func TestGanttIncludesOngoingSession(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	id := "76561198000000000"
+	if err := s.AddPlayer(id, "Playing now"); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().Add(-10 * time.Minute).Unix()
+	if _, err := s.db.Exec(`UPDATE players SET game_id=?,game_name=?,game_started_at=? WHERE steam_id=?`, 10, "Example", started, id); err != nil {
+		t.Fatal(err)
+	}
+	players, _, _, err := s.Gantt(1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(players) != 1 || len(players[0].Sessions) != 1 {
+		t.Fatalf("expected one live session, got %#v", players)
+	}
+	session := players[0].Sessions[0]
+	if !session.Ongoing || session.Game != "Example" || session.Ended <= session.Started {
+		t.Fatalf("expected ongoing session, got %#v", session)
+	}
+}
